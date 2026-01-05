@@ -1,0 +1,19 @@
+[project]
+name = "vocal-metrics"
+version = "0.1.0"
+description = "Provides a set of functions to retrieve the vocal metrics"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "librosa>=0.11.0",
+    "numpy>=2.3.5",
+    "pandas>=2.3.3",
+    "pytest>=9.0.2",
+    "ruff>=0.14.10",
+    "scipy>=1.16.3",
+]
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+filterwarnings = [
+    "ignore::DeprecationWarning"
+]
