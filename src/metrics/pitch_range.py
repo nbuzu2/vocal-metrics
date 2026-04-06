@@ -6,6 +6,8 @@ def analyze_pitch_range(df):
 
     if valid.empty:
         return {
+            "min_note": None,
+            "max_note": None,
             "range_semitones": 0,
             "range_robust_semitones": 0,
         }
@@ -16,6 +18,6 @@ def analyze_pitch_range(df):
     return {
         "min_note": librosa.hz_to_note(min_hz),
         "max_note": librosa.hz_to_note(max_hz),
-        "range_semitones": 12 * np.log2(max_hz / min_hz),
-        "range_robust_semitones": 12 * np.log2(p95 / p5),
+        "range_semitones": float(12 * np.log2(max_hz / min_hz)),
+        "range_robust_semitones": float(12 * np.log2(p95 / p5)),
     }
