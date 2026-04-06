@@ -1,5 +1,5 @@
 import numpy as np
-from audio_io.load_audio import load_audio
+from app_io.load_audio import load_audio
 
 path_test = "data/samples/086053_damn-youwav-82631.wav"
 
