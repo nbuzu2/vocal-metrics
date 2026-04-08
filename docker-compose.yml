@@ -1,0 +1,17 @@
+services:
+  app:
+    build:
+      context: .
+    container_name: vocal-metrics-app
+    expose:
+      - "8501"
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: vocal-metrics-nginx
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro

@@ -5,6 +5,7 @@ RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir uv
 
 WORKDIR /app
+ENV PYTHONPATH=/app/src
 
 COPY pyproject.toml uv.lock ReadMe.md ./
 COPY src ./src
