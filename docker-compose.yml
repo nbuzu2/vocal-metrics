@@ -3,12 +3,14 @@ services:
     build:
       context: .
     container_name: vocal-metrics-app
+    restart: unless-stopped
     expose:
       - "8501"
 
   nginx:
     image: nginx:stable-alpine
     container_name: vocal-metrics-nginx
+    restart: unless-stopped
     depends_on:
       - app
     ports:
