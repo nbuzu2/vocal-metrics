@@ -2,7 +2,7 @@
 name = "vocal-metrics"
 version = "0.1.0"
 description = "Provides a set of functions to retrieve the vocal metrics"
-readme = "README.md"
+readme = "ReadMe.md"
 requires-python = ">=3.11"
 dependencies = [
     "librosa>=0.11.0",
