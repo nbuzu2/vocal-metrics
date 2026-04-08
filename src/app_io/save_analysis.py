@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 from typing import Any
+from typing import Callable
 
 from analysis_pipeline import analyze_audio_file
 
@@ -21,7 +22,12 @@ def _read_uploaded_bytes(uploaded_file: Any) -> bytes:
     raise TypeError("Uploaded file must provide bytes through getvalue() or read().")
 
 
-def analyze_uploaded_audio(uploaded_file: Any) -> dict[str, Any]:
+def analyze_uploaded_audio(
+    uploaded_file: Any,
+    hop_length: int = 512,
+    include_frame_details: bool = False,
+    progress_callback: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
     """Analyze an uploaded file by writing it to a temporary file first."""
     filename = _get_uploaded_name(uploaded_file)
     suffix = Path(filename).suffix or ".wav"
@@ -32,7 +38,12 @@ def analyze_uploaded_audio(uploaded_file: Any) -> dict[str, Any]:
         temp_file.write(file_bytes)
 
     try:
-        result = analyze_audio_file(temp_path)
+        result = analyze_audio_file(
+            temp_path,
+            hop_length=hop_length,
+            include_frame_details=include_frame_details,
+            progress_callback=progress_callback,
+        )
         result["source"] = {
             "filename": filename,
             "path": None,
