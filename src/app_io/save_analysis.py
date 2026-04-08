@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -51,4 +52,6 @@ def analyze_uploaded_audio(
         }
         return result
     finally:
+        del file_bytes
         temp_path.unlink(missing_ok=True)
+        gc.collect()

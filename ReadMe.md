@@ -65,3 +65,43 @@ For example, inside Docker you might use:
 ```text
 /app/outputs/analyses
 ```
+
+## EC2 auto-start with systemd
+
+In EC2, `restart: unless-stopped` in `docker-compose.yml` may not be enough to bring the stack back reliably after a full reboot. A simple approach is to register the Compose stack as a `systemd` service on the instance.
+
+Create this file on the EC2 host:
+
+```text
+/etc/systemd/system/vocal-metrics.service
+```
+
+Use this content:
+
+```ini
+[Unit]
+Description=Vocal Metrics Docker Compose
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/ubuntu/vocal-metrics
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable it:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable vocal-metrics.service
+sudo systemctl start vocal-metrics.service
+sudo systemctl status vocal-metrics.service
+```
+
+This file belongs on the EC2 machine, not inside the repository checkout. The repository only documents the steps.

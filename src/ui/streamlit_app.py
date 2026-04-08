@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 from pathlib import Path
 
 import streamlit as st
@@ -19,8 +20,16 @@ uploaded_file = st.file_uploader(
     "Audio file",
     type=["wav", "mp3", "ogg", "flac", "m4a"],
 )
+recorded_file = st.audio_input("O graba un audio en WAV")
 
-if uploaded_file is not None:
+audio_source = recorded_file or uploaded_file
+
+if audio_source is not None:
+    if recorded_file is not None:
+        st.caption("Usando audio grabado desde el navegador.")
+    elif uploaded_file is not None:
+        st.caption("Usando archivo subido manualmente.")
+
     general_col, detailed_col = st.columns(2)
     run_general = general_col.button("Analisis general", type="primary", use_container_width=True)
     run_detailed = detailed_col.button("Analisis detallado", use_container_width=True)
@@ -37,7 +46,7 @@ if uploaded_file is not None:
             with st.spinner("Analyzing audio..."):
                 if run_detailed:
                     result = analyze_uploaded_audio(
-                        uploaded_file,
+                        audio_source,
                         hop_length=512,
                         include_frame_details=True,
                         progress_callback=update_progress,
@@ -45,7 +54,7 @@ if uploaded_file is not None:
                     mode_label = "detallado"
                 else:
                     result = analyze_uploaded_audio(
-                        uploaded_file,
+                        audio_source,
                         hop_length=512,
                         include_frame_details=False,
                         progress_callback=update_progress,
@@ -69,5 +78,8 @@ if uploaded_file is not None:
             if "frame_by_frame" in result:
                 st.subheader("Frame-by-frame")
                 st.dataframe(result["frame_by_frame"], width="stretch")
+            del result
+            del progress_messages
+            gc.collect()
         except Exception as exc:
             st.error(f"Analysis failed: {exc}")

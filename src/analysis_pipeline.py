@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import sys
 from pathlib import Path
 from typing import Any
@@ -279,6 +280,9 @@ def analyze_audio_with_progress(
         result["frame_by_frame"] = _build_frame_by_frame(df)
     else:
         result["second_by_second"] = _build_per_second(df)
+    # Release heavy intermediates as soon as the final payload is ready.
+    del df
+    gc.collect()
     return result
 
 
@@ -303,6 +307,8 @@ def analyze_audio_file(
         "filename": Path(path).name,
         "path": str(path),
     }
+    del y
+    gc.collect()
     return result
 
 
