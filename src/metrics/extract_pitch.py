@@ -10,6 +10,7 @@ stability metrics.
 import librosa
 import numpy as np
 import pandas as pd
+from scipy.ndimage import median_filter
 from typing import Tuple
 
 
@@ -132,8 +133,8 @@ def extract_frame_features(
     y: np.ndarray,
     sr: int,
     hop_length: int = 512,
-    fmin: float = librosa.note_to_hz("G2"),
-    fmax: float = librosa.note_to_hz("C5"),
+    fmin: float = librosa.note_to_hz("B2"),
+    fmax: float = librosa.note_to_hz("A6"),
     ) -> pd.DataFrame:
     
     """ Extract frame-level audio features into a DataFrame.
@@ -191,6 +192,24 @@ def extract_frame_features(
         "rolloff_hz": rolloff[:n_frames],
         "zcr": zcr[:n_frames]
     })
-    df["is_voice"] = df["voiced_prob"].fillna(0) >= 0.5
-    df["frequency_smoothed"] = df["frequency_hz"].where(df["is_voice"])
+    df["is_voice"] = (df["voiced_prob"].fillna(0) > 0.8) & (df["rms"] > 0.02)
+    df["frequency_smoothed"] = median_filter(df["frequency_hz"].fillna(0).to_numpy(), size=5)
+    df.loc[~df["is_voice"], "frequency_smoothed"] = np.nan
+    df["note_name"] = pd.Series([None] * len(df), dtype="object")
+    df["semitone"] = np.nan
+
+    mask_valid_pitch = (
+        df["frequency_smoothed"].notna()
+        & np.isfinite(df["frequency_smoothed"])
+        & (df["frequency_smoothed"] > 0)
+    )
+    if mask_valid_pitch.any():
+        df.loc[mask_valid_pitch, "note_name"] = librosa.hz_to_note(
+            df.loc[mask_valid_pitch, "frequency_smoothed"],
+            octave=True,
+            cents=False,
+        )
+        df.loc[mask_valid_pitch, "semitone"] = librosa.hz_to_midi(
+            df.loc[mask_valid_pitch, "frequency_smoothed"]
+        )
     return df
