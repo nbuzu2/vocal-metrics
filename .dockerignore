@@ -1,0 +1,12 @@
+.git
+.pytest_cache
+.venv
+.vscode
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+outputs
+tests
+data
