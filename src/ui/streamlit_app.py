@@ -63,8 +63,9 @@ if uploaded_file is not None:
             if result.get("progress_messages"):
                 st.subheader("Progreso del analisis")
                 progress_container.code("\n".join(result["progress_messages"]), language="text")
-            st.subheader("Second-by-second")
-            st.dataframe(result["second_by_second"], width="stretch")
+            if "second_by_second" in result:
+                st.subheader("Second-by-second")
+                st.dataframe(result["second_by_second"], width="stretch")
             if "frame_by_frame" in result:
                 st.subheader("Frame-by-frame")
                 st.dataframe(result["frame_by_frame"], width="stretch")

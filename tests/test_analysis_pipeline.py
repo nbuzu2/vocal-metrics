@@ -28,5 +28,6 @@ def test_analyze_audio_detailed_includes_frame_details():
 
     assert result["analysis_mode"]["hop_length"] == 512
     assert result["analysis_mode"]["include_frame_details"] is True
+    assert "second_by_second" not in result
     assert "frame_by_frame" in result
     assert len(result["frame_by_frame"]) > 0

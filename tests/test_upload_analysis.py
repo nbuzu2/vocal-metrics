@@ -32,4 +32,5 @@ def test_analyze_uploaded_audio_detailed_mode_includes_frame_details():
     result = analyze_uploaded_audio(uploaded, hop_length=512, include_frame_details=True)
 
     assert result["analysis_mode"]["hop_length"] == 512
+    assert "second_by_second" not in result
     assert "frame_by_frame" in result

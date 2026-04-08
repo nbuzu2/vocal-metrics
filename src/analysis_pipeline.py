@@ -263,7 +263,6 @@ def analyze_audio_with_progress(
         )
     result = {
         "summary": summary,
-        "second_by_second": _build_per_second(df),
         "report_lines": _build_report_lines(summary),
         "progress_messages": progress_messages,
         "analysis_mode": {
@@ -278,6 +277,8 @@ def analyze_audio_with_progress(
             lambda message: _collect_progress(progress_messages, progress_callback, message),
         )
         result["frame_by_frame"] = _build_frame_by_frame(df)
+    else:
+        result["second_by_second"] = _build_per_second(df)
     return result
 
 
