@@ -4,6 +4,9 @@ import os
 import boto3
 from pydantic import BaseModel
 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class DatabaseSettings(BaseModel):
     """
@@ -40,18 +43,25 @@ def _parse_aws_secret() -> dict:
 def load_database_settings() -> DatabaseSettings:
     """
     Loads the database settings from environment variables and AWS Secrets Manager.
-    host, port, and database name are loaded from environment variables, 
-    while username and password are fetched from AWS Secrets Manager.
+    Host, port, and database name are loaded from environment variables.
+    Username and password are loaded from environment variables when available,
+    otherwise they are fetched from AWS Secrets Manager.
     
     Returns:
         DatabaseSettings: An instance of DatabaseSettings with the loaded configuration.
     """
-    secret = _parse_aws_secret()
+    username = os.getenv("DB_USER")
+    password = os.getenv("DB_PASSWORD")
+
+    if not username or not password:
+        secret = _parse_aws_secret()
+        username = secret["username"]
+        password = secret["password"]
 
     return DatabaseSettings(
         host=os.getenv("DB_HOST"),
         port=int(os.getenv("DB_PORT", "3306")),
         database=os.getenv("DB_NAME"),
-        username=secret["username"],
-        password=secret["password"],
+        username=username,
+        password=password,
     )
