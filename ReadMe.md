@@ -66,6 +66,25 @@ For example, inside Docker you might use:
 /app/outputs/analyses
 ```
 
+When running the app with `docker compose`, place a `.env` file next to `docker-compose.yml` with the database settings needed by the `app` container. For example:
+
+```text
+DB_HOST=xxxx
+DB_PORT=3306
+DB_NAME=vocal_coach
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+```
+
+Then rebuild and start the stack with:
+
+```bash
+docker compose down
+docker compose up --build -d
+docker compose ps
+docker compose logs app
+```
+
 ## EC2 auto-start with systemd
 
 In EC2, `restart: unless-stopped` in `docker-compose.yml` may not be enough to bring the stack back reliably after a full reboot. A simple approach is to register the Compose stack as a `systemd` service on the instance.
