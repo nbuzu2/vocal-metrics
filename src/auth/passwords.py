@@ -2,9 +2,10 @@ from passlib.context import CryptContext
 
 
 pwd_context = CryptContext(
-    schemes=["bcrypt"],
+    schemes=["pbkdf2_sha256"],
     deprecated="auto",
 )
+
 
 def hash_password(password: str) -> str:
     """Returns the hashed version of the given password using bcrypt algorithm."""
