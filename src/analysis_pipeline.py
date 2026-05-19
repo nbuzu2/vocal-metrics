@@ -282,8 +282,6 @@ def _build_progress_lines(summary: dict[str, Any]) -> list[str]:
         f"   Control respiratorio (20%): {round(max(0.0, min(100.0, 100.0 - summary['rms_cv'] * 70.0)), 1)}%",
         f"   Calidad tonal (15%):        {round(max(0.0, min(100.0, 100.0 - (summary['mean_flatness'] / 0.004) * 100.0)), 1)}%",
         f"   ► Nota final: {summary['vocal_grade']}/10",
-        "",
-        "✅ Analisis completado",
     ]
 
 
@@ -351,6 +349,11 @@ def analyze_audio_with_progress(
         result["frame_by_frame"] = _build_frame_by_frame(df)
     else:
         result["second_by_second"] = _build_per_second(df)
+    _progress_print(
+        "✅ Analisis completado",
+        progress_enabled,
+        lambda message: _collect_progress(progress_messages, progress_callback, message),
+    )
     # Release heavy intermediates as soon as the final payload is ready.
     del df
     gc.collect()

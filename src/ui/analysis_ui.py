@@ -70,10 +70,11 @@ def run_analysis(audio_source: Any, mode: str) -> tuple[dict, str]:
 
     with st.spinner("Analyzing audio..."):
         include_frame_details = mode == "detallado"
+        hop_length = 128 if mode == "detallado" else 512
 
         result = analyze_uploaded_audio(
             audio_source,
-            hop_length=512,
+            hop_length=hop_length,
             include_frame_details=include_frame_details,
             progress_callback=update_progress,
         )
@@ -84,6 +85,7 @@ def run_analysis(audio_source: Any, mode: str) -> tuple[dict, str]:
         }
         saved_path = save_analysis_json(result)
 
+    progress_container.empty()
     return result, saved_path
 
 
