@@ -35,14 +35,14 @@ def _safe_note_from_hz(value: Any) -> str | None:
 
 def _note_accuracy_pct(semitone: Any) -> float | None:
     """How close the pitch is to the nearest note center (0–100%).
-    0 cents offset → 100%, 50 cents offset → 0%."""
+    Quadratic curve: 0 cents → 100%, ±10 cents → 96%, ±25 cents → 75%, ±50 cents → 0%."""
     if semitone is None:
         return None
     val = float(semitone)
     if not np.isfinite(val):
         return None
     cents_offset = (val - round(val)) * 100
-    return round(max(0.0, 100.0 - abs(cents_offset) * 2), 1)
+    return round(max(0.0, 100.0 * (1.0 - (abs(cents_offset) / 50.0) ** 2)), 2)
 
 
 def _progress_print(
@@ -129,7 +129,7 @@ def _build_per_second(df: pd.DataFrame) -> list[dict[str, Any]]:
         voiced_semitones = voiced_semitones[np.isfinite(voiced_semitones)]
         if not voiced_semitones.empty:
             cents_offsets = (voiced_semitones - voiced_semitones.round()) * 100
-            mean_note_accuracy = round((100.0 - cents_offsets.abs() * 2).clip(0, 100).mean(), 1)
+            mean_note_accuracy = round((100.0 * (1.0 - (cents_offsets.abs() / 50.0) ** 2)).clip(0, 100).mean(), 2)
         else:
             mean_note_accuracy = None
 
@@ -201,7 +201,7 @@ def _build_summary(df: pd.DataFrame, sr: int, duration: float, hop_length: int =
     valid_semitones = valid_semitones[np.isfinite(valid_semitones)]
     if not valid_semitones.empty:
         cents_offsets = (valid_semitones - valid_semitones.round()) * 100
-        mean_note_accuracy = round((100.0 - cents_offsets.abs() * 2).clip(0, 100).mean(), 1)
+        mean_note_accuracy = round((100.0 * (1.0 - (cents_offsets.abs() / 50.0) ** 2)).clip(0, 100).mean(), 2)
     else:
         mean_note_accuracy = 0.0
 
