@@ -34,8 +34,30 @@ def _safe_note_from_hz(value: Any) -> str | None:
 
 
 def _note_accuracy_pct(semitone: Any) -> float | None:
-    """How close the pitch is to the nearest note center (0–100%).
-    Quadratic curve: 0 cents → 100%, ±10 cents → 96%, ±25 cents → 75%, ±50 cents → 0%."""
+    """
+    Calcula qué tan cerca está el pitch del centro exacto de la nota musical más cercana.
+
+    En el sistema de temperamento igual, cada nota ocupa un rango de ±50 cents
+    (1 cent = 1/100 de semitono). El oído humano y los estándares de afinación profesional
+    consideran:
+
+        ±0  cents → afinación perfecta            → 100%
+        ±10 cents → afinación muy buena (pro)      →  96%
+        ±15 cents → afinación aceptable (amateur)  →  91%
+        ±25 cents → levemente desafinado, audible  →  75%
+        ±35 cents → claramente desafinado          →  51%
+        ±50 cents → equidistante entre dos notas   →   0%
+
+    La curva es cuadrática (no lineal) porque el oído percibe las desviaciones pequeñas
+    como menos problemáticas que las grandes: pasar de 0 a 10 cents apenas se nota,
+    pero pasar de 30 a 40 cents es muy audible. La fórmula es:
+
+        accuracy = 100 × (1 − |cents_offset| / 50)²
+
+    El valor del semitono MIDI fraccional (ej. 69.1 para A4 con 10 cents de desviación)
+    permite extraer el offset: la parte entera es la nota más cercana, la fracción × 100
+    son los cents de desviación.
+    """
     if semitone is None:
         return None
     val = float(semitone)
@@ -262,10 +284,11 @@ def _build_progress_lines(summary: dict[str, Any]) -> list[str]:
         f"   Rango total: {summary['range_semitones']} semitonos",
         f"   Rango tipico (5-95%): {summary['note_p5']} a {summary['note_p95']} ({summary['range_robust_semitones']} semitonos)",
         "",
-        "🌊 VIBRATO:",
-        f"   Frecuencia: {summary['vibrato_rate_hz']:.2f} Hz (ciclos/seg)",
-        f"   Amplitud: {summary['vibrato_extent_hz']:.2f} Hz",
-        f"   Clasificacion: {summary['vibrato_class']}",
+        "🌊 VIBRACION DE PITCH:",
+        f"   Vibrato:  {summary['vibrato_energy_ratio']*100:.1f}% de la energia  |  {summary['vibrato_rate_hz']:.2f} Hz  |  amplitud {summary['vibrato_extent_hz']:.2f} Hz  |  {summary['vibrato_class']}",
+        f"   Wobble:   {summary['wobble_energy_ratio']*100:.1f}% de la energia   (oscilacion lenta involuntaria, <3.5 Hz)",
+        f"   Flutter:  {summary['flutter_energy_ratio']*100:.1f}% de la energia  (oscilacion rapida involuntaria, >8 Hz)",
+        f"   Score estabilidad: {summary['wobble_score']}/100",
         "",
         "💨 CONTROL DE RESPIRACION:",
         f"   Variabilidad: {summary['rms_cv']:.3f}",

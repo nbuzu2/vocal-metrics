@@ -8,6 +8,8 @@ import streamlit as st
 
 from app_io.format_to_json import save_analysis_json
 from app_io.save_analysis import analyze_uploaded_audio
+from report.bedrock_report import generate_ai_report
+
 
 def get_audio_source() -> Any | None:
     """
@@ -32,7 +34,7 @@ def get_audio_source() -> Any | None:
 
 
 def get_analysis_mode() -> str | None:
-    """ 
+    """
     Gets the analysis mode selected by the user through two buttons: "Analisis general" and "Analisis detallado".
     Returns:
         str | None: Returns "general" if the user selects the general analysis mode, "detallado" if the user selects the detailed analysis mode, or None if no mode is selected.
@@ -56,7 +58,7 @@ def run_analysis(audio_source: Any, mode: str) -> tuple[dict, str]:
             file-like object from the file uploader or audio recorder.
         - mode (str): The analysis mode, either "general" or "detallado", which
             determines the level of detail in the analysis results.
-            
+
     Returns:
     - tuple[dict, str]: A tuple containing the analysis result as a dictionary
       and the file path where the analysis result JSON was saved.
@@ -89,66 +91,84 @@ def run_analysis(audio_source: Any, mode: str) -> tuple[dict, str]:
     return result, saved_path
 
 
-def render_analysis_result(result: dict, saved_path: str) -> None:
+def render_analysis_result(cached: dict) -> None:
     """
-    Renders the analysis result on the Streamlit page, including success message, saved JSON path, selected mode, progress messages, and detailed dataframes if available.
+    Renders the analysis result on the Streamlit page.
     Args:
-        - result (dict): The analysis result containing the evaluator information, progress messages, and optionally second-by-second and frame-by-frame data.
-        - saved_path (str): The file path where the analysis result JSON was saved.
-        
-    UI Elements Rendered:
-        - Success message indicating that the analysis is completed.
-        - Display of the saved JSON file path.
+        - cached (dict): Cached analysis data from st.session_state["last_analysis"].
     """
+    saved_path = cached["saved_path"]
+    result_evaluator = cached.get("evaluator", {})
+    progress_messages = cached.get("progress_messages", [])
+    second_by_second = cached.get("second_by_second")
+    frame_by_frame = cached.get("frame_by_frame")
+
     st.success("Analysis completed.")
     st.write(f"Saved JSON: `{Path(saved_path)}`")
-    st.write(f"Mode selected: `{result['evaluator']['label']}`")
+    st.write(f"Mode selected: `{result_evaluator.get('label', '')}`")
 
-    if result.get("progress_messages"):
+    if progress_messages:
         st.subheader("Progreso del analisis")
-        st.code("\n".join(result["progress_messages"]), language="text")
+        st.code("\n".join(progress_messages), language="text")
 
-    if "second_by_second" in result:
+    if second_by_second is not None:
         st.subheader("Second-by-second")
-        st.dataframe(result["second_by_second"], width="stretch")
+        st.dataframe(second_by_second, width="stretch")
 
-    if "frame_by_frame" in result:
+    if frame_by_frame is not None:
         st.subheader("Frame-by-frame")
-        st.dataframe(result["frame_by_frame"], width="stretch")
+        st.dataframe(frame_by_frame, width="stretch")
+
+
+def render_ai_report_section(summary: dict) -> None:
+    """Renders the AI report button and displays the generated report if available."""
+    st.divider()
+    st.subheader("Informe de IA")
+
+    if st.button("Generar Informe IA", type="primary", use_container_width=True):
+        with st.spinner("Generando informe con IA..."):
+            try:
+                report = generate_ai_report(summary)
+                st.session_state["ai_report_text"] = report
+            except Exception as exc:
+                st.error(f"Error al generar informe: {exc}")
+
+    if "ai_report_text" in st.session_state:
+        st.markdown(st.session_state["ai_report_text"])
 
 
 def render_analysis_page(user: dict) -> None:
     """
     Renders the analysis page where the user can upload or record an audio file, select the analysis mode, and view the results.
     Args:
-        - user (dict): The authenticated user's information, which can be used for personalized features 
-        or access control if needed in the future.
-
-    UI Elements Rendered:
-        - File uploader for audio files (wav, mp3, ogg, flac, m4a).
-        - Audio recorder input for recording audio directly from the browser.
-        - Buttons to select the analysis mode (general or detailed).
-        - Progress messages during the analysis process.
-        - Display of the saved JSON file path and selected mode after analysis completion.
-        - Dataframes showing second-by-second and frame-by-frame details if available in the result.
-        
-    Raises:
-        - Exception: If there is an error during the analysis process, an exception will be raised
-    
+        - user (dict): The authenticated user's information.
     """
-
     audio_source = get_audio_source()
     if audio_source is None:
+        st.session_state.pop("last_analysis", None)
+        st.session_state.pop("ai_report_text", None)
         return
 
     mode = get_analysis_mode()
-    if mode is None:
-        return
+    if mode is not None:
+        try:
+            result, saved_path = run_analysis(audio_source, mode)
+            st.session_state["last_analysis"] = {
+                "summary": result.get("summary", {}),
+                "evaluator": result.get("evaluator", {}),
+                "progress_messages": result.get("progress_messages", []),
+                "second_by_second": result.get("second_by_second"),
+                "frame_by_frame": result.get("frame_by_frame"),
+                "saved_path": saved_path,
+            }
+            st.session_state.pop("ai_report_text", None)
+            del result
+            gc.collect()
+        except Exception as exc:
+            st.error(f"Analysis failed: {exc}")
+            return
 
-    try:
-        result, saved_path = run_analysis(audio_source, mode)
-        render_analysis_result(result, saved_path)
-        del result
-        gc.collect()
-    except Exception as exc:
-        st.error(f"Analysis failed: {exc}")
+    cached = st.session_state.get("last_analysis")
+    if cached:
+        render_analysis_result(cached)
+        render_ai_report_section(cached["summary"])
