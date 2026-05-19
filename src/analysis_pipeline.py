@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from app_io import load_audio
+from metrics import analyze_pitch_modulation
 from metrics import analyze_pitch_range
 from metrics import analyze_vibrato
 from metrics import extract_frame_features
@@ -93,7 +94,7 @@ def _classify_tone_quality(mean_flatness: float) -> str:
 
 def _compute_vocal_score(
     note_accuracy: float,
-    pitch_stability: float,
+    wobble_score: float,
     rms_cv: float,
     mean_flatness: float,
 ) -> float:
@@ -101,7 +102,7 @@ def _compute_vocal_score(
     tone_score = max(0.0, min(100.0, 100.0 - (mean_flatness / 0.004) * 100.0))
     return round(
         0.40 * note_accuracy
-        + 0.25 * pitch_stability
+        + 0.25 * wobble_score
         + 0.20 * breath_score
         + 0.15 * tone_score,
         1,
@@ -172,7 +173,7 @@ def _build_frame_by_frame(df: pd.DataFrame) -> list[dict[str, Any]]:
     return frame_rows
 
 
-def _build_summary(df: pd.DataFrame, sr: int, duration: float) -> dict[str, Any]:
+def _build_summary(df: pd.DataFrame, sr: int, duration: float, hop_length: int = 512) -> dict[str, Any]:
     valid_pitch = df[df["is_voice"]]["frequency_smoothed"].dropna()
     valid_pitch = valid_pitch[np.isfinite(valid_pitch) & (valid_pitch > 0)]
     pitch_stats = analyze_pitch_range(df)
@@ -194,6 +195,7 @@ def _build_summary(df: pd.DataFrame, sr: int, duration: float) -> dict[str, Any]
     mean_flatness = _safe_float(voiced_df["flatness"].mean())
     vibrato_rate = _safe_float(vibrato_stats["vibrato_rate_hz"])
     vibrato_extent = _safe_float(vibrato_stats["vibrato_extent_hz"])
+    modulation_stats = analyze_pitch_modulation(df, sr, hop_length)
 
     valid_semitones = voiced_df["semitone"].dropna()
     valid_semitones = valid_semitones[np.isfinite(valid_semitones)]
@@ -203,13 +205,7 @@ def _build_summary(df: pd.DataFrame, sr: int, duration: float) -> dict[str, Any]
     else:
         mean_note_accuracy = 0.0
 
-    if mean_hz > 0 and std_hz > 0:
-        std_semitones = float(12 * np.log2(1 + std_hz / mean_hz))
-        pitch_stability = round(max(0.0, 100.0 - std_semitones * 50.0), 1)
-    else:
-        pitch_stability = 100.0
-
-    vocal_score = _compute_vocal_score(mean_note_accuracy, pitch_stability, rms_cv, mean_flatness)
+    vocal_score = _compute_vocal_score(mean_note_accuracy, modulation_stats["wobble_score"], rms_cv, mean_flatness)
     vocal_grade = _classify_vocal_grade(vocal_score)
 
     return {
@@ -236,7 +232,10 @@ def _build_summary(df: pd.DataFrame, sr: int, duration: float) -> dict[str, Any]
         "mean_flatness": round(mean_flatness, 4),
         "tone_quality": _classify_tone_quality(mean_flatness),
         "mean_note_accuracy_pct": mean_note_accuracy,
-        "pitch_stability_score": pitch_stability,
+        "wobble_score": modulation_stats["wobble_score"],
+        "wobble_energy_ratio": modulation_stats["wobble_energy_ratio"],
+        "vibrato_energy_ratio": modulation_stats["vibrato_energy_ratio"],
+        "flutter_energy_ratio": modulation_stats["flutter_energy_ratio"],
         "vocal_grade": vocal_grade,
     }
 
@@ -244,7 +243,7 @@ def _build_summary(df: pd.DataFrame, sr: int, duration: float) -> dict[str, Any]
 def _build_report_lines(summary: dict[str, Any]) -> list[str]:
     return [
         "REPORTE DE ANALISIS VOCAL",
-        f"Calificacion: {summary['vocal_grade']}/10 | Afinacion: {summary['mean_note_accuracy_pct']}% | Estabilidad: {summary['pitch_stability_score']}%",
+        f"Calificacion: {summary['vocal_grade']}/10 | Afinacion: {summary['mean_note_accuracy_pct']}% | Wobble: {summary['wobble_score']}%",
         f"Duracion: {summary['duration']:.1f}s ({summary['voice_percentage']}% con voz)",
         f"Rango vocal: {summary['min_note']} a {summary['max_note']} | media {summary['mean_note']}",
         f"Rango total: {summary['range_semitones']} semitonos | tipico {summary['note_p5']} a {summary['note_p95']}",
@@ -277,10 +276,10 @@ def _build_progress_lines(summary: dict[str, Any]) -> list[str]:
         f"   Pureza: {summary['mean_flatness']:.4f} -> {summary['tone_quality']}",
         "",
         "🎯 CALIFICACION VOCAL:",
-        f"   Afinacion (40%):           {summary['mean_note_accuracy_pct']}%",
-        f"   Estabilidad de pitch (25%): {summary['pitch_stability_score']}%",
+        f"   Afinacion (40%):        {summary['mean_note_accuracy_pct']}%",
+        f"   Estabilidad/wobble (25%): {summary['wobble_score']}%  [wobble {summary['wobble_energy_ratio']*100:.1f}% | vibrato {summary['vibrato_energy_ratio']*100:.1f}% | flutter {summary['flutter_energy_ratio']*100:.1f}%]",
         f"   Control respiratorio (20%): {round(max(0.0, min(100.0, 100.0 - summary['rms_cv'] * 70.0)), 1)}%",
-        f"   Calidad tonal (15%):        {round(max(0.0, min(100.0, 100.0 - (summary['mean_flatness'] / 0.004) * 100.0)), 1)}%",
+        f"   Calidad tonal (15%):    {round(max(0.0, min(100.0, 100.0 - (summary['mean_flatness'] / 0.004) * 100.0)), 1)}%",
         f"   ► Nota final: {summary['vocal_grade']}/10",
     ]
 
@@ -324,7 +323,7 @@ def analyze_audio_with_progress(
         progress_enabled,
         lambda message: _collect_progress(progress_messages, progress_callback, message),
     )
-    summary = _build_summary(df, sr, duration)
+    summary = _build_summary(df, sr, duration, hop_length)
     for line in _build_progress_lines(summary):
         _progress_print(
             line,
