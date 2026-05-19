@@ -27,3 +27,4 @@ def render_page_header(user: dict) -> None:
 def render_main_page(user: dict) -> None:
     render_page_header(user)
     render_analysis_page(user)
+

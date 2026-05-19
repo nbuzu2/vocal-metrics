@@ -32,6 +32,18 @@ def _safe_note_from_hz(value: Any) -> str | None:
     return librosa.hz_to_note(hz, octave=True, cents=False)
 
 
+def _note_accuracy_pct(semitone: Any) -> float | None:
+    """How close the pitch is to the nearest note center (0–100%).
+    0 cents offset → 100%, 50 cents offset → 0%."""
+    if semitone is None:
+        return None
+    val = float(semitone)
+    if not np.isfinite(val):
+        return None
+    cents_offset = (val - round(val)) * 100
+    return round(max(0.0, 100.0 - abs(cents_offset) * 2), 1)
+
+
 def _progress_print(
     message: str,
     enabled: bool = False,
@@ -79,6 +91,27 @@ def _classify_tone_quality(mean_flatness: float) -> str:
     return "tono ruidoso"
 
 
+def _compute_vocal_score(
+    note_accuracy: float,
+    pitch_stability: float,
+    rms_cv: float,
+    mean_flatness: float,
+) -> float:
+    breath_score = max(0.0, min(100.0, 100.0 - rms_cv * 70.0))
+    tone_score = max(0.0, min(100.0, 100.0 - (mean_flatness / 0.004) * 100.0))
+    return round(
+        0.40 * note_accuracy
+        + 0.25 * pitch_stability
+        + 0.20 * breath_score
+        + 0.15 * tone_score,
+        1,
+    )
+
+
+def _classify_vocal_grade(score: float) -> float:
+    return max(1.0, round(score / 10, 1))
+
+
 def _build_per_second(df: pd.DataFrame) -> list[dict[str, Any]]:
     df_seconds = df[np.isfinite(df["time_s"])].copy()
     df_seconds["second"] = df_seconds["time_s"].astype(int)
@@ -91,6 +124,14 @@ def _build_per_second(df: pd.DataFrame) -> list[dict[str, Any]]:
         mean_frequency = voiced_freq.mean() if not voiced_freq.empty else np.nan
         mean_note = _safe_note_from_hz(mean_frequency)
 
+        voiced_semitones = voiced["semitone"].dropna()
+        voiced_semitones = voiced_semitones[np.isfinite(voiced_semitones)]
+        if not voiced_semitones.empty:
+            cents_offsets = (voiced_semitones - voiced_semitones.round()) * 100
+            mean_note_accuracy = round((100.0 - cents_offsets.abs() * 2).clip(0, 100).mean(), 1)
+        else:
+            mean_note_accuracy = None
+
         rows.append(
             {
                 "second": int(second),
@@ -101,6 +142,7 @@ def _build_per_second(df: pd.DataFrame) -> list[dict[str, Any]]:
                 "mean_rms": round(_safe_float(chunk["rms"].mean()), 6),
                 "mean_pitch_hz": round(_safe_float(mean_frequency), 2) if np.isfinite(mean_frequency) else None,
                 "mean_note": mean_note,
+                "note_accuracy_pct": mean_note_accuracy,
                 "mean_centroid_hz": round(_safe_float(chunk["centroid_hz"].mean()), 2),
                 "mean_flatness": round(_safe_float(chunk["flatness"].mean()), 6),
             }
@@ -122,6 +164,7 @@ def _build_frame_by_frame(df: pd.DataFrame) -> list[dict[str, Any]]:
                 "frequency_hz": round(_safe_float(row.frequency_hz), 2) if np.isfinite(_safe_float(row.frequency_hz, np.nan)) else None,
                 "frequency_smoothed": round(_safe_float(row.frequency_smoothed), 2) if np.isfinite(_safe_float(row.frequency_smoothed, np.nan)) and _safe_float(row.frequency_smoothed) > 0 else None,
                 "note_name": row.note_name if isinstance(row.note_name, str) else None,
+                "note_accuracy_pct": _note_accuracy_pct(row.semitone),
                 "centroid_hz": round(_safe_float(row.centroid_hz), 2),
                 "flatness": round(_safe_float(row.flatness), 6),
             }
@@ -152,6 +195,23 @@ def _build_summary(df: pd.DataFrame, sr: int, duration: float) -> dict[str, Any]
     vibrato_rate = _safe_float(vibrato_stats["vibrato_rate_hz"])
     vibrato_extent = _safe_float(vibrato_stats["vibrato_extent_hz"])
 
+    valid_semitones = voiced_df["semitone"].dropna()
+    valid_semitones = valid_semitones[np.isfinite(valid_semitones)]
+    if not valid_semitones.empty:
+        cents_offsets = (valid_semitones - valid_semitones.round()) * 100
+        mean_note_accuracy = round((100.0 - cents_offsets.abs() * 2).clip(0, 100).mean(), 1)
+    else:
+        mean_note_accuracy = 0.0
+
+    if mean_hz > 0 and std_hz > 0:
+        std_semitones = float(12 * np.log2(1 + std_hz / mean_hz))
+        pitch_stability = round(max(0.0, 100.0 - std_semitones * 50.0), 1)
+    else:
+        pitch_stability = 100.0
+
+    vocal_score = _compute_vocal_score(mean_note_accuracy, pitch_stability, rms_cv, mean_flatness)
+    vocal_grade = _classify_vocal_grade(vocal_score)
+
     return {
         "duration": round(duration, 3),
         "sample_rate": int(sr),
@@ -175,12 +235,16 @@ def _build_summary(df: pd.DataFrame, sr: int, duration: float) -> dict[str, Any]
         "brightness": _classify_brightness(mean_centroid),
         "mean_flatness": round(mean_flatness, 4),
         "tone_quality": _classify_tone_quality(mean_flatness),
+        "mean_note_accuracy_pct": mean_note_accuracy,
+        "pitch_stability_score": pitch_stability,
+        "vocal_grade": vocal_grade,
     }
 
 
 def _build_report_lines(summary: dict[str, Any]) -> list[str]:
     return [
         "REPORTE DE ANALISIS VOCAL",
+        f"Calificacion: {summary['vocal_grade']}/10 | Afinacion: {summary['mean_note_accuracy_pct']}% | Estabilidad: {summary['pitch_stability_score']}%",
         f"Duracion: {summary['duration']:.1f}s ({summary['voice_percentage']}% con voz)",
         f"Rango vocal: {summary['min_note']} a {summary['max_note']} | media {summary['mean_note']}",
         f"Rango total: {summary['range_semitones']} semitonos | tipico {summary['note_p5']} a {summary['note_p95']}",
@@ -211,6 +275,13 @@ def _build_progress_lines(summary: dict[str, Any]) -> list[str]:
         "✨ TIMBRE:",
         f"   Brillo: {summary['mean_centroid_hz']:.0f} Hz -> {summary['brightness']}",
         f"   Pureza: {summary['mean_flatness']:.4f} -> {summary['tone_quality']}",
+        "",
+        "🎯 CALIFICACION VOCAL:",
+        f"   Afinacion (40%):           {summary['mean_note_accuracy_pct']}%",
+        f"   Estabilidad de pitch (25%): {summary['pitch_stability_score']}%",
+        f"   Control respiratorio (20%): {round(max(0.0, min(100.0, 100.0 - summary['rms_cv'] * 70.0)), 1)}%",
+        f"   Calidad tonal (15%):        {round(max(0.0, min(100.0, 100.0 - (summary['mean_flatness'] / 0.004) * 100.0)), 1)}%",
+        f"   ► Nota final: {summary['vocal_grade']}/10",
         "",
         "✅ Analisis completado",
     ]
