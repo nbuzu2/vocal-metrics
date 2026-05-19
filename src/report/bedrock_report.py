@@ -7,7 +7,7 @@ import boto3
 
 _MODEL_ID = os.environ.get(
     "BEDROCK_MODEL_ID",
-    "anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
 )
 
 
