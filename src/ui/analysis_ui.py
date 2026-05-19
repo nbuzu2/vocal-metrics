@@ -50,7 +50,7 @@ def get_analysis_mode() -> str | None:
     return None
 
 
-def run_analysis(audio_source: Any, mode: str) -> tuple[dict, str]:
+def run_analysis(audio_source: Any, mode: str, style: str = "libre") -> tuple[dict, str]:
     """
     Runs the audio analysis using the provided audio source and mode.
     Args:
@@ -79,6 +79,7 @@ def run_analysis(audio_source: Any, mode: str) -> tuple[dict, str]:
             hop_length=hop_length,
             include_frame_details=include_frame_details,
             progress_callback=update_progress,
+            style=style,
         )
 
         result["evaluator"] = {
@@ -137,6 +138,22 @@ def render_ai_report_section(summary: dict) -> None:
         st.markdown(st.session_state["ai_report_text"])
 
 
+def get_vocal_style() -> str:
+    style_labels = {
+        "libre":  "Sin especificar",
+        "lirico": "Lirico / Opera",
+        "pop":    "Pop / Contemporaneo",
+        "jazz":   "Jazz",
+        "folk":   "Folk / Musica antigua",
+    }
+    label = st.selectbox(
+        "Estilo vocal",
+        options=list(style_labels.values()),
+        index=0,
+    )
+    return next(k for k, v in style_labels.items() if v == label)
+
+
 def render_analysis_page(user: dict) -> None:
     """
     Renders the analysis page where the user can upload or record an audio file, select the analysis mode, and view the results.
@@ -149,10 +166,11 @@ def render_analysis_page(user: dict) -> None:
         st.session_state.pop("ai_report_text", None)
         return
 
+    style = get_vocal_style()
     mode = get_analysis_mode()
     if mode is not None:
         try:
-            result, saved_path = run_analysis(audio_source, mode)
+            result, saved_path = run_analysis(audio_source, mode, style)
             st.session_state["last_analysis"] = {
                 "summary": result.get("summary", {}),
                 "evaluator": result.get("evaluator", {}),

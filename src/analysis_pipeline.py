@@ -114,6 +114,46 @@ def _classify_tone_quality(mean_flatness: float) -> str:
     return "tono ruidoso"
 
 
+VOCAL_STYLES = {
+    "libre":   "Sin especificar",
+    "lirico":  "Lirico / Opera",
+    "pop":     "Pop / Contemporaneo",
+    "jazz":    "Jazz",
+    "folk":    "Folk / Musica antigua",
+}
+
+
+def _vibrato_style_comment(summary: dict[str, Any], style: str) -> str:
+    """One-line assessment of pitch modulation quality relative to the declared style."""
+    vib = summary["vibrato_energy_ratio"]
+    wob = summary["wobble_energy_ratio"]
+    reg = summary["vibrato_regularity"]
+
+    if style == "lirico":
+        if vib >= 0.4 and reg >= 65:
+            return "vibrato lirico bien formado"
+        if vib >= 0.3 and reg < 50:
+            return "vibrato irregular — trabajar regularidad"
+        if wob > 0.25:
+            return "wobble excesivo para estilo lirico"
+        return "vibrato insuficiente para estilo lirico"
+    if style == "pop":
+        if vib > 0.4:
+            return "vibrato amplio — en pop se prefiere tono mas recto"
+        if wob > 0.25:
+            return "inestabilidad de pitch — trabajar control"
+        return "buen control de pitch para estilo pop"
+    if style == "jazz":
+        if wob > 0.3:
+            return "inestabilidad involuntaria detectada"
+        return "modulacion dentro del rango aceptable para jazz"
+    if style == "folk":
+        if vib > 0.3:
+            return "vibrato presente — folk generalmente prefiere tono recto"
+        return "tono recto apropiado para folk"
+    return ""
+
+
 def _compute_vocal_score(
     note_accuracy: float,
     wobble_score: float,
@@ -195,7 +235,7 @@ def _build_frame_by_frame(df: pd.DataFrame) -> list[dict[str, Any]]:
     return frame_rows
 
 
-def _build_summary(df: pd.DataFrame, sr: int, duration: float, hop_length: int = 512) -> dict[str, Any]:
+def _build_summary(df: pd.DataFrame, sr: int, duration: float, hop_length: int = 512, style: str = "libre") -> dict[str, Any]:
     valid_pitch = df[df["is_voice"]]["frequency_smoothed"].dropna()
     valid_pitch = valid_pitch[np.isfinite(valid_pitch) & (valid_pitch > 0)]
     pitch_stats = analyze_pitch_range(df)
@@ -258,6 +298,9 @@ def _build_summary(df: pd.DataFrame, sr: int, duration: float, hop_length: int =
         "wobble_energy_ratio": modulation_stats["wobble_energy_ratio"],
         "vibrato_energy_ratio": modulation_stats["vibrato_energy_ratio"],
         "flutter_energy_ratio": modulation_stats["flutter_energy_ratio"],
+        "vibrato_regularity": modulation_stats["vibrato_regularity"],
+        "dominant_vibrato_hz": modulation_stats["dominant_vibrato_hz"],
+        "style": style,
         "vocal_grade": vocal_grade,
     }
 
@@ -284,11 +327,11 @@ def _build_progress_lines(summary: dict[str, Any]) -> list[str]:
         f"   Rango total: {summary['range_semitones']} semitonos",
         f"   Rango tipico (5-95%): {summary['note_p5']} a {summary['note_p95']} ({summary['range_robust_semitones']} semitonos)",
         "",
-        "🌊 VIBRACION DE PITCH:",
-        f"   Vibrato:  {summary['vibrato_energy_ratio']*100:.1f}% de la energia  |  {summary['vibrato_rate_hz']:.2f} Hz  |  amplitud {summary['vibrato_extent_hz']:.2f} Hz  |  {summary['vibrato_class']}",
-        f"   Wobble:   {summary['wobble_energy_ratio']*100:.1f}% de la energia   (oscilacion lenta involuntaria, <3.5 Hz)",
-        f"   Flutter:  {summary['flutter_energy_ratio']*100:.1f}% de la energia  (oscilacion rapida involuntaria, >8 Hz)",
-        f"   Score estabilidad: {summary['wobble_score']}/100",
+        f"🌊 VIBRACION DE PITCH  [{VOCAL_STYLES.get(summary['style'], 'Sin especificar')}]:",
+        f"   Vibrato:      {summary['vibrato_energy_ratio']*100:.1f}% energia  |  frec. dominante {summary['dominant_vibrato_hz']:.2f} Hz  |  regularidad {summary['vibrato_regularity']:.0f}%",
+        f"   Wobble:       {summary['wobble_energy_ratio']*100:.1f}% energia  (oscilacion lenta involuntaria <3.5 Hz)",
+        f"   Flutter:      {summary['flutter_energy_ratio']*100:.1f}% energia  (oscilacion rapida involuntaria >8 Hz)",
+        f"   Estabilidad:  {summary['wobble_score']:.0f}/100" + (f"  —  {_vibrato_style_comment(summary, summary['style'])}" if summary['style'] != 'libre' else ""),
         "",
         "💨 CONTROL DE RESPIRACION:",
         f"   Variabilidad: {summary['rms_cv']:.3f}",
@@ -307,13 +350,14 @@ def _build_progress_lines(summary: dict[str, Any]) -> list[str]:
     ]
 
 
-def analyze_audio(y: np.ndarray, sr: int, hop_length: int = 512, include_frame_details: bool = False) -> dict[str, Any]:
+def analyze_audio(y: np.ndarray, sr: int, hop_length: int = 512, include_frame_details: bool = False, style: str = "libre") -> dict[str, Any]:
     """Run the full metrics pipeline from in-memory audio."""
     return analyze_audio_with_progress(
         y,
         sr,
         hop_length=hop_length,
         include_frame_details=include_frame_details,
+        style=style,
     )
 
 
@@ -323,6 +367,7 @@ def analyze_audio_with_progress(
     hop_length: int = 512,
     include_frame_details: bool = False,
     progress_callback: Callable[[str], None] | None = None,
+    style: str = "libre",
 ) -> dict[str, Any]:
     """Run the full metrics pipeline from in-memory audio with optional progress callbacks."""
     progress_enabled = include_frame_details
@@ -346,7 +391,7 @@ def analyze_audio_with_progress(
         progress_enabled,
         lambda message: _collect_progress(progress_messages, progress_callback, message),
     )
-    summary = _build_summary(df, sr, duration, hop_length)
+    summary = _build_summary(df, sr, duration, hop_length, style)
     for line in _build_progress_lines(summary):
         _progress_print(
             line,
@@ -387,6 +432,7 @@ def analyze_audio_file(
     hop_length: int = 512,
     include_frame_details: bool = False,
     progress_callback: Callable[[str], None] | None = None,
+    style: str = "libre",
 ) -> dict[str, Any]:
     """Load an audio file from disk and analyze it."""
     resolved_path = Path(path).expanduser()
@@ -397,6 +443,7 @@ def analyze_audio_file(
         hop_length=hop_length,
         include_frame_details=include_frame_details,
         progress_callback=progress_callback,
+        style=style,
     )
     result["summary"]["duration"] = round(float(duration), 3)
     result["source"] = {

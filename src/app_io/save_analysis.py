@@ -28,6 +28,7 @@ def analyze_uploaded_audio(
     hop_length: int = 512,
     include_frame_details: bool = False,
     progress_callback: Callable[[str], None] | None = None,
+    style: str = "libre",
 ) -> dict[str, Any]:
     """Analyze an uploaded file by writing it to a temporary file first."""
     filename = _get_uploaded_name(uploaded_file)
@@ -44,6 +45,7 @@ def analyze_uploaded_audio(
             hop_length=hop_length,
             include_frame_details=include_frame_details,
             progress_callback=progress_callback,
+            style=style,
         )
         result["source"] = {
             "filename": filename,
